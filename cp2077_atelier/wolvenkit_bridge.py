@@ -18,12 +18,12 @@ _PRIORITY_WAITING = 0
 _BATCH_EXTRACTED_ARCHIVES: set[str] = set()
 _SHARED_PNG_INDEX: list[str] = []
 
-CACHE_MARKER_VERSION = "v2"
+CACHE_MARKER_VERSION = "v3"
 
-# Skip duplicate body-refit meshes (_ebb, _rb, _angel, _vtk, etc.) and LOD/shadow meshes
+# Uncook base .mesh files and diffuse/color .xbm textures (skipping duplicate body refits and normal/roughness/mask maps)
 FAST_UNCOOK_REGEX = (
-    r"^(?!.*(_ebb|_rb|_angel|_lush|_solo|_gymfiend|_adonis|_vtk|original\d|_lod|_shadow|lining))"
-    r".*(\.mesh|(icon|preview|atlas|ui|thumb|store).*\.xbm|\.bin)$"
+    r"^(?!.*(_ebb|_rb|_angel|_lush|_solo|_gymfiend|_adonis|_vtk|original\d|_lod|_shadow|lining|normal|roughness|metallic|_n0|_rm0|\.mlmask))"
+    r".*(\.mesh|\.xbm|\.bin)$"
 )
 
 ICON_ONLY_REGEX = r".*((icon|preview|atlas|ui|thumb|store).*\.xbm|\.bin)$"
@@ -150,9 +150,9 @@ def _collect_extracted(
     cache_root: Path,
     item_hint: str = "",
 ) -> dict[str, list[str]]:
-    """Collect and rank extracted .png icons and .glb 3D meshes."""
+    """Collect and rank extracted .glb 3D meshes, 3D diffuse textures (.png), and 2D icons (.png)."""
     if not out_dir.exists():
-        return {"images": [], "meshes": []}
+        return {"images": [], "meshes": [], "textures": []}
 
     hint_tokens = [
         t for t in re.split(r"[^a-z0-9]+", item_hint.lower())
@@ -160,6 +160,7 @@ def _collect_extracted(
     ]
 
     img_candidates: list[tuple[int, str]] = []
+    tex_candidates: list[tuple[int, int, str]] = []
     mesh_candidates: list[tuple[int, int, str]] = []
 
     for p in out_dir.rglob("*"):
@@ -167,27 +168,29 @@ def _collect_extracted(
             continue
         ext = p.suffix.lower()
         rel = p.relative_to(cache_root).as_posix()
+        rel_l = rel.lower()
         stem_l = p.stem.lower()
         size = p.stat().st_size
 
         if ext in (".png", ".jpg", ".jpeg", ".webp"):
-            # Skip tiny < 3KB mlmask slices
             if size < 3000:
                 continue
-            # Deprioritize PBR normal/roughness/mask maps vs real Atelier icons
-            is_pbr_map = any(k in stem_l for k in ("_mask", "masksset", "_n01", "normal", "roughness", "metallic"))
-            is_icon_named = any(k in rel.lower() for k in ("icon", "preview", "atlas", "thumb", "store")) or not stem_l.isdigit()
-            is_icon_sized = 4000 <= size <= 950_000
-            hint_match = sum(1 for tok in hint_tokens if tok in stem_l)
+            is_pbr_map = any(k in stem_l for k in ("_mask", "masksset", "_n0", "_rm0", "normal", "roughness", "metallic", "opacity"))
+            is_icon_sheet = any(k in rel_l for k in ("icon", "preview", "atlas", "thumb", "store", "inkatlas"))
+            hint_match = sum(1 for tok in hint_tokens if tok in rel_l)
 
-            score = 0
-            if not is_pbr_map:
-                score += 50
-            if is_icon_named:
-                score += 30
-            if is_icon_sized:
-                score += 25
-            score += hint_match * 20
+            # Candidate for 3D surface texture (prefer diffuse / base color / albedo / non-icon textures)
+            if not is_pbr_map and not is_icon_sheet:
+                is_diffuse = any(k in stem_l for k in ("base_color", "base color", "albedo", "diffuse", "_d0", "color", "tex", "cloth", "leather", "fabric"))
+                tex_score = (40 if is_diffuse else 10) + hint_match * 25
+                tex_candidates.append((-tex_score, -size, rel))
+            elif not is_pbr_map and is_icon_sheet:
+                # Fallback texture if no dedicated diffuse texture exists
+                tex_candidates.append((10 - hint_match * 10, -size, rel))
+
+            # Candidate for 2D icon
+            is_icon_sized = 4000 <= size <= 950_000
+            score = (50 if not is_pbr_map else 0) + (35 if is_icon_sheet else 0) + (25 if is_icon_sized else 0) + hint_match * 20
             img_candidates.append((-score, rel))
 
         elif ext in (".glb", ".gltf", ".obj"):
@@ -197,10 +200,12 @@ def _collect_extracted(
             mesh_candidates.append((-hint_match, -size, rel))
 
     img_candidates.sort()
+    tex_candidates.sort()
     mesh_candidates.sort()
 
     return {
         "images": [rel for _, rel in img_candidates],
+        "textures": [rel for _, _, rel in tex_candidates],
         "meshes": [rel for _, _, rel in mesh_candidates],
     }
 
@@ -276,8 +281,10 @@ def extract_preview_only(
     return {
         "cached": res.get("cached", False),
         "image": res["images"][0] if res.get("images") else None,
+        "texture": res["textures"][0] if res.get("textures") else None,
         "mesh": res["meshes"][0] if res.get("meshes") else None,
         "images": res.get("images", []),
+        "textures": res.get("textures", []),
         "meshes": res.get("meshes", []),
     }
 
