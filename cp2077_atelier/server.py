@@ -415,25 +415,20 @@ def make_handler(app_state: AtelierAppState) -> type[BaseHTTPRequestHandler]:
                 item_hint = f"{match.entity_name or ''} {match.appearance_name or ''} {match.tweak_id}"
 
                 if path == "/api/extract-preview":
-                    shared_rel = match_shared_icon(
-                        app_state.cache_dir, match.atlas_path, match.source_mod, match.tweak_id
-                    )
-                    if shared_rel:
-                        return self._send_json({
-                            "image": f"/cache-assets/{quote(shared_rel, safe='/')}",
-                            "mesh": None,
-                            "cached": True,
-                        })
                     res = extract_preview_only(
                         arch_path,
                         app_state.cache_dir,
                         app_state.wolvenkit_cli,
                         item_hint=item_hint,
                     )
-                    img_rel = res.get("image")
+                    img_rel = res.get("image") or match_shared_icon(
+                        app_state.cache_dir, match.atlas_path, match.source_mod, match.tweak_id
+                    )
+                    tex_rel = res.get("texture")
                     mesh_rel = res.get("mesh")
                     return self._send_json({
                         "image": f"/cache-assets/{quote(img_rel, safe='/')}" if img_rel else None,
+                        "texture": f"/cache-assets/{quote(tex_rel, safe='/')}" if tex_rel else None,
                         "mesh": f"/cache-assets/{quote(mesh_rel, safe='/')}" if mesh_rel else None,
                         "cached": res.get("cached", False),
                     })
@@ -452,10 +447,12 @@ def make_handler(app_state: AtelierAppState) -> type[BaseHTTPRequestHandler]:
                     )
                     if shared_rel:
                         imgs = [f"/cache-assets/{quote(shared_rel, safe='/')}"]
+                textures = [f"/cache-assets/{quote(rel, safe='/')}" for rel in res.get("textures", [])]
                 meshes = [f"/cache-assets/{quote(rel, safe='/')}" for rel in res.get("meshes", [])]
                 return self._send_json({
                     "archive": arch_path.name,
                     "images": imgs,
+                    "textures": textures,
                     "meshes": meshes,
                     "cached": res.get("cached", False),
                 })

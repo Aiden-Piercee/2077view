@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>2077VIEW // External Virtual Atelier</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=4" />
 </head>
 <body>
   <header class="topbar">
@@ -103,6 +103,14 @@
           <button class="btn btn-accent btn-sm" id="btnBatchCet" disabled>Copy CET Commands</button>
         </div>
         <div class="batch-right">
+          <div class="tile-scale-control" title="Scale 2D tile size">
+            <span class="scale-label">TILE SIZE</span>
+            <button class="btn btn-secondary btn-xs" data-tile-size="160">S</button>
+            <button class="btn btn-secondary btn-xs" data-tile-size="240">M</button>
+            <button class="btn btn-secondary btn-xs" data-tile-size="320">L</button>
+            <button class="btn btn-secondary btn-xs" data-tile-size="420">XL</button>
+            <input type="range" id="tileSizeSlider" min="140" max="460" step="10" value="240" />
+          </div>
           <span id="resultInfo">0 items</span>
           <button class="btn btn-secondary btn-sm" id="prevPage">Prev</button>
           <span id="pageInfo">1 / 1</span>
@@ -129,8 +137,8 @@
       <div class="inspector-body">
         <div class="inspector-visual">
           <div class="viewer-tabs">
-            <button class="active" id="tab3dBtn">3D Mesh Preview</button>
-            <button id="tab2dBtn">2D Atelier Icon</button>
+            <button class="active" id="tab3dBtn">Textured 3D Render</button>
+            <button id="tab2dBtn">2D Texture / Icon</button>
           </div>
           <div id="viewer3dWrap" class="viewer-box">
             <canvas id="meshCanvas" width="420" height="340"></canvas>
@@ -138,6 +146,10 @@
               <button class="btn btn-sm btn-secondary" id="btnWireframe">Wireframe: OFF</button>
               <button class="btn btn-sm btn-secondary" id="btnResetCam">Reset View</button>
               <span class="hint">Drag to orbit · Scroll to zoom</span>
+            </div>
+            <div class="row-gap full-width">
+              <select id="meshSelect" title="Select 3D Submesh"><option value="">Default 3D Mesh</option></select>
+              <select id="texSelect" title="Select Surface Texture"><option value="">Studio Weave / Auto Texture</option></select>
             </div>
           </div>
           <div id="viewer2dWrap" class="viewer-box hidden">
@@ -244,8 +256,8 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/static/viewer3d.js"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/viewer3d.js?v=4"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>
 

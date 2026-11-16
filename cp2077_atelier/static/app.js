@@ -233,6 +233,8 @@
       grid.appendChild(card);
     }
 
+    const currentSlider = document.getElementById("tileSizeSlider");
+    if (currentSlider) applyTileSize(currentSlider.value);
     autoLoadPagePreviews(items);
   }
 
@@ -264,22 +266,27 @@
           body: JSON.stringify({ item_id: rep.id }),
         });
         if (gen !== previewGen) return;
+        const texUrl = res.texture || res.image || null;
         if (res.mesh) {
-          for (const it of groupItems) it._cachedMeshUrl = res.mesh;
-        }
-        if (res.image) {
           for (const it of groupItems) {
-            it._cachedImgUrl = res.image;
-            const img = document.getElementById(`thumb-${encodeURIComponent(it.id)}`);
-            if (img) img.src = res.image;
+            it._cachedMeshUrl = res.mesh;
+            it._cachedTexUrl = texUrl;
           }
-        } else if (res.mesh && window.renderGlbThumbnailDataUrl) {
-          const snapUrl = await window.renderGlbThumbnailDataUrl(res.mesh, qualityColor(rep.quality));
+        }
+        // Prefer Textured 3D Render snapshot as the primary tile image when a 3D mesh exists!
+        if (res.mesh && window.renderGlbThumbnailDataUrl) {
+          const snapUrl = await window.renderGlbThumbnailDataUrl(res.mesh, qualityColor(rep.quality), texUrl);
           if (gen !== previewGen) return;
           for (const it of groupItems) {
             it._cachedImgUrl = snapUrl;
             const img = document.getElementById(`thumb-${encodeURIComponent(it.id)}`);
             if (img) img.src = snapUrl;
+          }
+        } else if (res.image) {
+          for (const it of groupItems) {
+            it._cachedImgUrl = res.image;
+            const img = document.getElementById(`thumb-${encodeURIComponent(it.id)}`);
+            if (img) img.src = res.image;
           }
         }
       } catch {
@@ -327,10 +334,14 @@
 
     document.getElementById("inspectorModal").classList.remove("hidden");
 
+    const meshSelect = document.getElementById("meshSelect");
+    const texSelect = document.getElementById("texSelect");
+    meshSelect.innerHTML = `<option value="">Default 3D Mesh</option>`;
+    texSelect.innerHTML = `<option value="">Studio Weave (No Texture)</option>`;
+
     if (item._cachedMeshUrl) {
       try {
-        await viewer3d.loadGlbUrl(item._cachedMeshUrl, item.name, qualityColor(item.quality));
-        return;
+        await viewer3d.loadGlbUrl(item._cachedMeshUrl, item.name, qualityColor(item.quality), item._cachedTexUrl || null);
       } catch {
         // Fall through to full extract-item if cached URL failed
       }
@@ -353,28 +364,48 @@
         viewer3d.loadProceduralFallback(item.category, item.name);
       }
     } else {
-      viewer3d.loadProceduralFallback(item.category, item.name);
-      // Extract 3D mesh & previews via WolvenKit CLI
+      if (!item._cachedMeshUrl) {
+        viewer3d.loadProceduralFallback(item.category, item.name);
+      }
+      // Extract 3D mesh & surface textures via WolvenKitDaemon
       try {
-        showToast("Loading 3D mesh via WolvenKit CLI...");
+        if (!item._cachedMeshUrl) showToast("Loading textured 3D mesh...");
         const ext = await api("/api/extract-item", {
           method: "POST",
           body: JSON.stringify({ item_id: item.id }),
         });
         if (state.inspectedItem && state.inspectedItem.id === item.id) {
-          if (ext.images && ext.images.length) {
-            imgEl.src = ext.images[0];
-            const cardImg = document.getElementById(`thumb-${encodeURIComponent(item.id)}`);
-            if (cardImg) cardImg.src = ext.images[0];
+          const allTex = [...(ext.textures || []), ...(ext.images || [])];
+          const uniqueTex = Array.from(new Set(allTex));
+          const primaryTex = uniqueTex[0] || null;
+
+          if (uniqueTex.length) {
+            imgEl.src = uniqueTex[0];
+            uniqueTex.forEach((tUrl, idx) => {
+              const opt = document.createElement("option");
+              opt.value = tUrl;
+              opt.textContent = `Texture ${idx + 1}: ${decodeURIComponent(tUrl.split("/").pop())}`;
+              if (idx === 0) opt.selected = true;
+              texSelect.appendChild(opt);
+            });
           }
+
           if (ext.meshes && ext.meshes.length) {
+            ext.meshes.forEach((mUrl, idx) => {
+              const opt = document.createElement("option");
+              opt.value = mUrl;
+              opt.textContent = `Mesh ${idx + 1}: ${decodeURIComponent(mUrl.split("/").pop())}`;
+              if (idx === 0) opt.selected = true;
+              meshSelect.appendChild(opt);
+            });
+
             const glbUrl = ext.meshes.find((m) => m.toLowerCase().endsWith(".glb")) || ext.meshes[0];
             if (glbUrl.toLowerCase().endsWith(".glb")) {
-              await viewer3d.loadGlbUrl(glbUrl, `${item.name} (${ext.archive})`, qualityColor(item.quality));
-              showToast(`Loaded 3D mesh (${ext.meshes.length} submesh${ext.meshes.length > 1 ? "es" : ""} in ${ext.archive})`);
-              if ((!ext.images || !ext.images.length) && window.renderGlbThumbnailDataUrl) {
-                const snapUrl = await window.renderGlbThumbnailDataUrl(glbUrl, qualityColor(item.quality));
-                imgEl.src = snapUrl;
+              if (!item._cachedMeshUrl) {
+                await viewer3d.loadGlbUrl(glbUrl, `${item.name} (${ext.archive})`, qualityColor(item.quality), primaryTex);
+              }
+              if (window.renderGlbThumbnailDataUrl) {
+                const snapUrl = await window.renderGlbThumbnailDataUrl(glbUrl, qualityColor(item.quality), primaryTex);
                 const cardImg = document.getElementById(`thumb-${encodeURIComponent(item.id)}`);
                 if (cardImg) cardImg.src = snapUrl;
               }
@@ -382,9 +413,23 @@
           } else {
             showToast(ext.message || `No 3D .mesh found in ${ext.archive || "archive"}`);
           }
+
+          meshSelect.onchange = async () => {
+            if (meshSelect.value) {
+              await viewer3d.loadGlbUrl(meshSelect.value, item.name, qualityColor(item.quality), texSelect.value || null);
+            }
+          };
+          texSelect.onchange = async () => {
+            if (texSelect.value) {
+              await viewer3d.loadTextureUrl(texSelect.value);
+              imgEl.src = texSelect.value;
+            } else {
+              viewer3d.clearTexture();
+            }
+          };
         }
       } catch {
-        // WolvenKit CLI not available or archive has no extractable mesh; keep procedural fallback
+        // Keep procedural fallback
       }
     }
   }
@@ -701,6 +746,39 @@
     document.getElementById("filterBody").value = state.body_type;
     loadItems();
   };
+
+  // Tile scaling (S / M / L / XL + continuous slider, persisted in localStorage)
+  function applyTileSize(px) {
+    const width = Math.max(140, Math.min(460, parseInt(px, 10) || 240));
+    const thumbHeight = Math.round(width * 0.82);
+    document.documentElement.style.setProperty("--tile-width", `${width}px`);
+    document.documentElement.style.setProperty("--tile-thumb-height", `${thumbHeight}px`);
+    const grid = document.getElementById("itemsGrid");
+    if (grid) {
+      grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${width}px, 1fr))`;
+      grid.querySelectorAll(".card-thumb").forEach((el) => {
+        el.style.height = `${thumbHeight}px`;
+      });
+    }
+    const slider = document.getElementById("tileSizeSlider");
+    if (slider && parseInt(slider.value, 10) !== width) slider.value = String(width);
+    document.querySelectorAll("[data-tile-size]").forEach((btn) => {
+      btn.classList.toggle("active", parseInt(btn.dataset.tileSize, 10) === width);
+    });
+    try { localStorage.setItem("2077view_tile_size", String(width)); } catch {}
+  }
+
+  const savedTileSize = (() => {
+    try { return localStorage.getItem("2077view_tile_size"); } catch { return null; }
+  })();
+  applyTileSize(savedTileSize || 240);
+
+  document.getElementById("tileSizeSlider").addEventListener("input", (e) => {
+    applyTileSize(e.target.value);
+  });
+  document.querySelectorAll("[data-tile-size]").forEach((btn) => {
+    btn.onclick = () => applyTileSize(btn.dataset.tileSize);
+  });
 
   // Inspector controls
   document.getElementById("tab3dBtn").onclick = () => {
