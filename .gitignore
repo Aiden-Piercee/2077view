@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.2077view_cache/
+.2077view_state.json
+.2077view_config.json
+_quarantine/
+sample_mods/
+tools/wolvenkit/
+tools/wk_daemon/bin/
+tools/wk_daemon/obj/

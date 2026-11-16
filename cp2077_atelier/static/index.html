@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2077VIEW // External Virtual Atelier</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-tag">CP2077</span>
+      <h1>2077VIEW // EXTERNAL ATELIER</h1>
+    </div>
+    <div class="topbar-stats" id="summaryStats">
+      <span>Active: <strong id="statActive">0</strong></span>
+      <span>Rejected: <strong id="statRejected" class="warn">0</strong></span>
+      <span>Quarantined: <strong id="statQuarantined">0</strong></span>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-secondary" id="btnSaves" title="Load CP2077 Save Profile">V Save Profile</button>
+      <button class="btn btn-secondary" id="btnPaths" title="Configure Mod & Quarantine Directories">Paths</button>
+      <button class="btn btn-secondary" id="btnRescan">Rescan</button>
+      <button class="btn btn-accent" id="btnGenerateMock">Load 120 Mock Mods</button>
+      <button class="btn btn-danger" id="btnQuarantineModal">Quarantine Queue</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <aside class="sidebar">
+      <div class="filter-group">
+        <label for="searchInput">SEARCH</label>
+        <input type="text" id="searchInput" placeholder="Name, TweakDB ID, mod, tag..." />
+      </div>
+
+      <div class="filter-group">
+        <label>STATUS</label>
+        <div class="segmented" id="statusTabs">
+          <button data-status="active" class="active">Active</button>
+          <button data-status="rejected">Rejected</button>
+          <button data-status="all">All</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label for="sortBy">SORT BY</label>
+        <div class="row-gap">
+          <select id="sortBy">
+            <option value="name">Name</option>
+            <option value="date_added">Date Added</option>
+            <option value="category">Category</option>
+            <option value="source_mod">Source Mod</option>
+            <option value="quality">Quality</option>
+            <option value="file_size">File Size</option>
+            <option value="price">Price</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" id="sortDirBtn" data-dir="asc">ASC</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label for="filterCategory">CATEGORY / SLOT</label>
+        <select id="filterCategory"><option value="">All Categories</option></select>
+      </div>
+
+      <div class="filter-group">
+        <label for="filterStore">ATELIER STORE</label>
+        <select id="filterStore"><option value="">All Stores</option></select>
+      </div>
+
+      <div class="filter-group">
+        <label for="filterMod">SOURCE MOD</label>
+        <select id="filterMod"><option value="">All Mods</option></select>
+      </div>
+
+      <div class="filter-group">
+        <label for="filterBody">BODY TYPE</label>
+        <select id="filterBody"><option value="">All Bodies</option></select>
+      </div>
+
+      <div class="filter-group">
+        <label for="filterQuality">QUALITY</label>
+        <select id="filterQuality"><option value="">All Qualities</option></select>
+      </div>
+
+      <div class="filter-group">
+        <label>TAGS</label>
+        <div id="tagCloud" class="tag-cloud"></div>
+      </div>
+
+      <button class="btn btn-secondary full-width" id="btnClearFilters">Reset Filters</button>
+    </aside>
+
+    <main class="catalog-pane">
+      <div class="batch-bar">
+        <div class="batch-left">
+          <label class="checkbox-label">
+            <input type="checkbox" id="selectAllPage" /> Select Page
+          </label>
+          <span id="selectedCount">0 selected</span>
+          <button class="btn btn-danger btn-sm" id="btnBatchReject" disabled>Reject Selected</button>
+          <button class="btn btn-secondary btn-sm" id="btnBatchUnreject" disabled>Unreject Selected</button>
+          <button class="btn btn-accent btn-sm" id="btnBatchCet" disabled>Copy CET Commands</button>
+        </div>
+        <div class="batch-right">
+          <span id="resultInfo">0 items</span>
+          <button class="btn btn-secondary btn-sm" id="prevPage">Prev</button>
+          <span id="pageInfo">1 / 1</span>
+          <button class="btn btn-secondary btn-sm" id="nextPage">Next</button>
+        </div>
+      </div>
+
+      <div id="vProfileBanner" class="v-banner hidden">
+        <span>Active V Save: <strong id="vBannerText"></strong></span>
+        <button class="btn btn-sm btn-secondary" id="btnFilterToV">Filter to V Body</button>
+      </div>
+
+      <div id="itemsGrid" class="items-grid"></div>
+    </main>
+  </div>
+
+  <!-- Item Inspector & 3D Preview Modal -->
+  <div id="inspectorModal" class="modal hidden">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h2 id="inspTitle">Item Inspector</h2>
+        <button class="btn btn-secondary btn-sm" data-close="inspectorModal">Close</button>
+      </div>
+      <div class="inspector-body">
+        <div class="inspector-visual">
+          <div class="viewer-tabs">
+            <button class="active" id="tab3dBtn">3D Mesh Preview</button>
+            <button id="tab2dBtn">2D Atelier Icon</button>
+          </div>
+          <div id="viewer3dWrap" class="viewer-box">
+            <canvas id="meshCanvas" width="420" height="340"></canvas>
+            <div class="viewer-controls">
+              <button class="btn btn-sm btn-secondary" id="btnWireframe">Wireframe: OFF</button>
+              <button class="btn btn-sm btn-secondary" id="btnResetCam">Reset View</button>
+              <span class="hint">Drag to orbit · Scroll to zoom</span>
+            </div>
+          </div>
+          <div id="viewer2dWrap" class="viewer-box hidden">
+            <img id="inspImg" alt="Item preview" />
+          </div>
+        </div>
+        <div class="inspector-meta">
+          <div id="inspMetaGrid" class="meta-grid"></div>
+          <div class="cet-box">
+            <label>CYBER ENGINE TWEAKS (CET) EQUIP COMMAND</label>
+            <div class="row-gap">
+              <input type="text" id="inspCetInput" readonly />
+              <button class="btn btn-accent btn-sm" id="btnCopyCet">Copy</button>
+            </div>
+          </div>
+          <div class="inspector-actions">
+            <button class="btn btn-danger" id="inspRejectBtn">Mark Rejected</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quarantine Manager Modal -->
+  <div id="quarantineModal" class="modal hidden">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h2>Rejection & Quarantine Manager</h2>
+        <button class="btn btn-secondary btn-sm" data-close="quarantineModal">Close</button>
+      </div>
+      <div class="quarantine-section">
+        <div class="section-head">
+          <h3>Pending Rejected Items (<span id="pendingRejectCount">0</span>)</h3>
+          <button class="btn btn-danger" id="btnExecuteQuarantine">Move Rejected Mods to Quarantine</button>
+        </div>
+        <div id="pendingRejectList" class="q-list"></div>
+      </div>
+      <div class="quarantine-section">
+        <h3>Quarantined Mod Packages</h3>
+        <div id="quarantinedList" class="q-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Paths Config Modal -->
+  <div id="pathsModal" class="modal hidden">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h2>Directory Configuration &amp; Mod Requirements</h2>
+        <button class="btn btn-secondary btn-sm" data-close="pathsModal">Close</button>
+      </div>
+      <div class="v-banner" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+        <strong>What 2077view scans for real mods:</strong>
+        <span class="hint">Point <b>Mods Directory</b> to your <code>Cyberpunk 2077</code> game root (recommended so it sees <code>archive/pc/mod/*.archive</code>, <code>r6/tweaks/*.yaml</code>, and <code>r6/scripts/*.reds</code> together) or any mod staging folder.</span>
+        <span class="hint" id="diagBanner">Current scan: loading...</span>
+      </div>
+      <div id="detectedInstalls" class="q-list"></div>
+      <div class="filter-group">
+        <label for="cfgModDir">MODS DIRECTORY (Cyberpunk 2077 root or mod folder)</label>
+        <div class="row-gap">
+          <input type="text" id="cfgModDir" />
+          <button class="btn btn-secondary btn-sm" data-browse="cfgModDir">Browse...</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label for="cfgQuarantineDir">QUARANTINE / BACKUP DIRECTORY</label>
+        <div class="row-gap">
+          <input type="text" id="cfgQuarantineDir" />
+          <button class="btn btn-secondary btn-sm" data-browse="cfgQuarantineDir">Browse...</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label for="cfgSaveDir">CYBERPUNK 2077 SAVES DIRECTORY</label>
+        <div class="row-gap">
+          <input type="text" id="cfgSaveDir" />
+          <button class="btn btn-secondary btn-sm" data-browse="cfgSaveDir">Browse...</button>
+        </div>
+      </div>
+      <div id="folderBrowser" class="quarantine-section hidden">
+        <div class="section-head">
+          <strong id="browseCurrentPath">Select Folder</strong>
+          <div class="row-gap">
+            <button class="btn btn-sm btn-secondary" id="btnBrowseUp">Up</button>
+            <button class="btn btn-sm btn-accent" id="btnBrowseSelect">Use This Folder</button>
+          </div>
+        </div>
+        <div id="browseList" class="q-list"></div>
+      </div>
+      <button class="btn btn-accent full-width" id="btnSavePaths">Save &amp; Rescan</button>
+    </div>
+  </div>
+
+  <!-- V Save Profile Modal -->
+  <div id="savesModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Cyberpunk 2077 Character Saves</h2>
+        <button class="btn btn-secondary btn-sm" data-close="savesModal">Close</button>
+      </div>
+      <p class="hint" id="saveDirHint"></p>
+      <div id="savesList" class="q-list"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/static/viewer3d.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
+
